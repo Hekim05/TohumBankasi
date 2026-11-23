@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function uye() {
+      return request.auth != null && exists(/databases/$(db)/documents/uyeler/$(request.auth.uid));
+    }
+    // Ekip kodu: yalnız konsoldan girilir, uygulama okuyamaz
+    match /gizli/{d} { allow read, write: if false; }
+    // Cihaz katılımı: doğru ekip koduyla bir kez
+    match /uyeler/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['ad', 'kod', 'tarih'])
+        && request.resource.data.kod == get(/databases/$(db)/documents/gizli/ekip).data.kod;
+      allow update, delete: if false;
+    }
+    match /tohumlar/{id} { allow read, write: if uye(); }
+    match /ayarlar/{id}  { allow read, write: if uye(); }
+  }
+}
