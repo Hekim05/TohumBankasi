@@ -264,7 +264,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-9';
+const APP_VERSION = '2026.11.24-10';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
@@ -410,9 +410,14 @@ async function aiOku(b64,kap){
     try{
       let txt;
       if(S.ai){
-        const model=S.ai.mod.getGenerativeModel(S.ai.inst,{model:m,generationConfig:{responseMimeType:'application/json',temperature:0}});
-        const r=await model.generateContent([aiPrompt(kap),{inlineData:{data:b64,mimeType:'image/jpeg'}}]);
-        txt=r.response.text();
+        try{
+          const model=S.ai.mod.getGenerativeModel(S.ai.inst,{model:m,generationConfig:{responseMimeType:'application/json',temperature:0}});
+          const r=await model.generateContent([aiPrompt(kap),{inlineData:{data:b64,mimeType:'image/jpeg'}}]);
+          txt=r.response.text();
+        }catch(fe){
+          if(anahtarim && !/404|not.?found/i.test(String(fe.message))) txt=await geminiDogrudan(m,anahtarim,[{text:aiPrompt(kap)},{inline_data:{mime_type:'image/jpeg',data:b64}}]);
+          else throw fe;
+        }
       } else txt=await geminiDogrudan(m,anahtarim,[{text:aiPrompt(kap)},{inline_data:{mime_type:'image/jpeg',data:b64}}]);
       txt=txt.replace(/^```(json)?|```$/g,'').trim();
       const j=JSON.parse(txt); j._ham=txt; j._motor='Yapay zekâ ('+m+')'; LS.set('tb_aihata',''); return j;
@@ -602,7 +607,7 @@ async function oku(){
     if(S.motor==='ocr' || (S.motor==='oto' && !aiVar)) sonuc=await ocrOku(c);
     else sonuc=await aiOku(c.toDataURL('image/jpeg',.85).split(',')[1], S.tarakap);
   }catch(e){ hata=e; }
-  if(hata && aiVar && S.motor!=='ocr'){ const m=String(hata.message||hata).slice(0,160); LS.set('tb_aihata',new Date().toLocaleTimeString('tr-TR')+' · '+m); aiHataGoster(m); K.mesgul=false; $('#cerceve').classList.remove('okuyor'); K.degisim=true; K.bekle=Date.now()+4000; return; }
+  if(hata && aiVar && S.motor!=='ocr'){ const m=String(hata.message||hata).slice(0,400); LS.set('tb_aihata',new Date().toLocaleTimeString('tr-TR')+' · '+m); aiHataGoster(m); K.mesgul=false; $('#cerceve').classList.remove('okuyor'); K.degisim=true; K.bekle=Date.now()+4000; return; }
   if(hata && S.motor==='oto'){ try{ sonuc=await ocrOku(c); }catch(e){} }
   $('#cerceve').classList.remove('okuyor'); K.mesgul=false;
   if(!sonuc){ bip(false); toast('Okunamadı: '+(hata?.message||'bilinmeyen hata').slice(0,80)); K.degisim=true; K.bekle=Date.now()+3000; return; }
