@@ -261,10 +261,17 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-3';
+const APP_VERSION = '2026.11.24-4';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCdrES0YBKPidCSzBLgPscIyNS4ropIwkQ",
+  authDomain: "tohum-bankasi-9e716.firebaseapp.com",
+  projectId: "tohum-bankasi-9e716",
+  storageBucket: "tohum-bankasi-9e716.firebasestorage.app",
+  messagingSenderId: "367778055307",
+  appId: "1:367778055307:web:34a81a1995f654405fc08e"
+};
 const FB_VER = '13.4.0';
 
 /* ================= Sabitler ================= */
@@ -346,9 +353,20 @@ async function firebaseBaslat(){
   S.mod='firebase'; durumGoster();
   fs.onSnapshot(fs.collection(db,'tohumlar'),snap=>{ const m=new Map(); snap.forEach(d=>m.set(d.id,{...d.data(),id:d.id})); S.items=m; degisti(); durumGoster(snap.metadata.fromCache); },e=>toast('Okuma hatası: '+e.code));
   fs.onSnapshot(fs.doc(db,'ayarlar','genel'),d=>{ if(d.exists()) S.genel=Object.assign({ozelAlanlar:[],konumlar:[],omurler:{}},d.data()); degisti(); });
+  yerelAktarimSor();
   // Yapay zekâ (Firebase AI Logic, Gemini Developer API)
   try{ const ai=await import(base+'firebase-ai.js'); S.ai={mod:ai,inst:ai.getAI(fapp,{backend:new ai.GoogleAIBackend()})}; }catch(e){ S.ai=null; }
   motorBilgi(); ayarlarCiz();
+}
+function yerelAktarimSor(){
+  const yerel=LS.get('tb_items',{}), liste=Object.values(yerel); if(!liste.length||LS.get('tb_aktarildi',false)) return;
+  $('#sheet').innerHTML=`<div class="tutamak"></div><h2>Telefondaki kayıtlar</h2><p>Bu telefonda Firebase'den önce girilmiş <b>${liste.length}</b> kayıt var. Ortak envantere aktarılsın mı?</p>
+   <div class="satir"><button class="btn" id="akt-hayir">Aktarma</button><button class="btn ana" id="akt-evet">Aktar</button></div>`;
+  $('#perde').classList.add('acik');
+  $('#akt-hayir').onclick=()=>{ LS.set('tb_aktarildi',true); $('#perde').classList.remove('acik'); };
+  $('#akt-evet').onclick=()=>{ const {doc,setDoc}=S.fb.fs; let n=0;
+    for(const it of liste){ const k=temiz({...it,ekleyen:it.ekleyen||S.uyeAd||''}); setDoc(doc(S.fb.db,'tohumlar',k.id),k).catch(e=>toast('Aktarım hatası: '+e.code)); n++; }
+    LS.set('tb_aktarildi',true); $('#perde').classList.remove('acik'); toast(n+' kayıt ortak envantere aktarıldı'); };
 }
 function kapiGoster(ref){
   return new Promise(res=>{
