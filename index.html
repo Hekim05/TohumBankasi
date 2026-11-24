@@ -213,6 +213,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
   <div class="kutu bant">
     <h3>Okuma</h3>
     <div class="alan"><label>Okuyucu</label><select id="ay-motor"><option value="oto">Otomatik (yapay zekâ, yoksa çevrimdışı)</option><option value="ai">Yalnız yapay zekâ</option><option value="ocr">Yalnız çevrimdışı OCR (basılı etiket)</option></select></div>
+    <div class="ayar-satir"><span>Okurken tam çözünürlüklü fotoğraf çek (kaydedilmez)</span><input type="checkbox" id="ay-foto" style="width:24px;height:24px"></div>
     <div class="ayar-satir"><span>Okuma sesi (bip)</span><input type="checkbox" id="ay-ses" style="width:24px;height:24px"></div>
     <div class="alan"><label>Gemini API anahtarı (yalnız bu telefonda saklanır)</label><input id="ay-anahtar" type="password" autocomplete="off" placeholder="AIza…"><div class="kucuk">aistudio.google.com/apikey adresinden ücretsiz alınır. Firebase bağlanınca gerekmez.</div>
       <div class="satir" style="margin-top:8px"><button class="btn" id="ay-anahtar-kaydet">Kaydet</button><button class="btn" id="ay-anahtar-dene">Bağlantıyı dene</button></div></div>
@@ -261,7 +262,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-7';
+const APP_VERSION = '2026.11.24-8';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
@@ -537,7 +538,7 @@ async function kameraAc(){
   K.degisim=true; K.sabit=0; K.dongu=setInterval(kare,160);
 }
 function kameraKapat(){
-  clearInterval(K.dongu); K.dongu=null; if(K.akis) K.akis.getTracks().forEach(t=>t.stop()); K.akis=null;
+  K.ic=null; clearInterval(K.dongu); K.dongu=null; if(K.akis) K.akis.getTracks().forEach(t=>t.stop()); K.akis=null;
   $('#kamera-bos').hidden=false; ['#cerceve','#ilerleme','#kamera-ust','#ipucu'].forEach(s=>$(s).hidden=true); $('#btn-oku').disabled=true;
 }
 function kirpBolge(){ // çerçevenin video piksel karşılığı
@@ -571,10 +572,28 @@ function kirpYakala(){
   const b=kirpBolge(); const max=1600, o=Math.min(1,max/b.sw); const c=document.createElement('canvas');
   c.width=Math.round(b.sw*o); c.height=Math.round(b.sh*o); c.getContext('2d').drawImage(K.video,b.sx,b.sy,b.sw,b.sh,0,0,c.width,c.height); return c;
 }
+// Tam çözünürlüklü fotoğraf çek (galeriye kaydedilmez), çerçeve bölgesini kırp. Desteklenmezse canlı kareye düş.
+async function fotoYakala(){
+  if(!LS.get('tb_foto',true) || !('ImageCapture' in window) || !K.akis) return null;
+  try{
+    const b=kirpBolge(), vw=K.video.videoWidth, vh=K.video.videoHeight;
+    const ic=K.ic||(K.ic=new ImageCapture(K.akis.getVideoTracks()[0]));
+    const blob=await Promise.race([ic.takePhoto(),new Promise((_,r)=>setTimeout(()=>r(new Error('zaman aşımı')),6000))]);
+    const bmp=await createImageBitmap(blob);
+    // Canlı görüntü, fotoğrafın ortadan kırpılmış hâli sayılır (en-boy oranı farklı olabilir)
+    let fw=bmp.width, fh=bmp.height, ox=0, oy=0;
+    if(fw/fh > vw/vh){ const w=fh*vw/vh; ox=(fw-w)/2; fw=w; } else { const h=fw*vh/vw; oy=(fh-h)/2; fh=h; }
+    const k=fw/vw, sx=ox+b.sx*k, sy=oy+b.sy*k, sw=b.sw*k, sh=b.sh*k;
+    const max=2000, o=Math.min(1,max/sw), c=document.createElement('canvas');
+    c.width=Math.round(sw*o); c.height=Math.round(sh*o); c.getContext('2d').drawImage(bmp,sx,sy,sw,sh,0,0,c.width,c.height);
+    bmp.close&&bmp.close(); K.fotoOk=true; return c;
+  }catch(e){ console.warn('foto',e); K.ic=null; return null; }
+}
 async function oku(){
   if(K.mesgul||!K.video) return; K.mesgul=true; K.degisim=false; K.sabit=0;
   $('#cerceve').classList.add('okuyor'); $('#ipucu').textContent='Etiket okunuyor…';
-  const c=kirpYakala(); // fotoğraf kaydedilmez; yalnız bu kare okunur
+  $('#ipucu').textContent='Fotoğraf çekiliyor…';
+  const c=(await fotoYakala())||kirpYakala(); // fotoğraf kaydedilmez; yalnız bellekte okunur
   let sonuc=null, hata=null;
   const aiVar=aiHazir() && navigator.onLine;
   try{
@@ -779,7 +798,7 @@ function ayarlarCiz(){
   $('#ay-mod').textContent=S.mod==='firebase'?'Firebase (ortak)':'Bu cihaz (yerel)';
   $('#ay-uye').textContent=S.uyeAd||'—';
   $('#ay-ai').textContent=S.ai?'Bağlı (Firebase)':LS.get('tb_gemini','')?'Bağlı (API anahtarı)':'Bağlı değil'; $('#ay-anahtar').value=LS.get('tb_gemini','');
-  $('#ay-motor').value=S.motor; $('#ay-model').value=S.model; $('#ay-ses').checked=LS.get('tb_ses',true);
+  $('#ay-motor').value=S.motor; $('#ay-model').value=S.model; $('#ay-ses').checked=LS.get('tb_ses',true); $('#ay-foto').checked=LS.get('tb_foto',true);
   $('#ozel-alanlar').innerHTML=(S.genel.ozelAlanlar||[]).map(o=>`<div class="ozel-alan"><b>${esc(o.l)}</b><span class="kucuk">${o.t==='secim'?'Seçmeli: '+esc((o.s||[]).join(', ')):o.t==='sayi'?'Sayı':'Metin'}</span><button class="ikonbtn" data-osil="${o.k}">${IKON.sil}</button></div>`).join('')||'<div class="kucuk">Henüz özel alan yok.</div>';
   $('#omur-tablo').innerHTML='<tr><th>Tür</th><th>Ömür (yıl)</th></tr>'+TURLER.map(t=>`<tr><td>${t[0]}</td><td><input type="number" min="1" max="15" data-omur="${t[0]}" value="${omur(t[0])}" style="width:70px;min-height:36px;border:1px solid var(--cizgi);border-radius:6px;padding:0 8px;font:inherit"></td></tr>`).join('');
   $('#surum').textContent='Sürüm '+APP_VERSION;
@@ -791,6 +810,7 @@ $('#ay-anahtar-dene').onclick=async()=>{ const k=$('#ay-anahtar').value.trim(); 
     try{ await geminiDogrudan(m,k,[{text:'Yalnızca "tamam" yaz.'}],false); LS.set('tb_gemini',k); if(m!==S.model){S.model=m;LS.set('tb_model',m);} ayarlarCiz(); motorBilgi(); toast('Bağlantı çalışıyor ('+m+')'); son=null; break; }
     catch(e){ son=e; if(!/404|not found/i.test(e.message)) break; } }
   if(son) toast('Olmadı: '+String(son.message).slice(0,90)); b.disabled=false; b.textContent='Bağlantıyı dene'; };
+$('#ay-foto').onchange=e=>LS.set('tb_foto',e.target.checked);
 $('#ay-ses').onchange=e=>{LS.set('tb_ses',e.target.checked); if(e.target.checked){sesAc();bip(true)}};
 $('#ay-motor').onchange=e=>{S.motor=e.target.value;LS.set('tb_motor',S.motor);motorBilgi()};
 $('#ay-model').onchange=e=>{S.model=e.target.value.trim()||'gemini-3.8-flash';LS.set('tb_model',S.model);motorBilgi()};
