@@ -261,7 +261,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-6';
+const APP_VERSION = '2026.11.24-7';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
@@ -394,7 +394,7 @@ function aiPrompt(kap){
   return `Görüntüde bir tohum bankasına ait ${kap==='zarf'?'kraft kâğıt tohum zarfı':'kavanoz kapağı etiketi'} var. Yazılar basılı ya da el yazısı olabilir.
 Etiketteki bilgileri oku ve YALNIZCA şu JSON'u döndür:
 {"bos":false,"ad":"tohumun adı, etiketteki gibi (ör. Çeri Domates)","tur":"genel tür (Domates, Biber, Kabak, Fasulye, Mısır…)","cesit":"çeşit/yerel ad varsa","uretici":"üretici (ör. Kent Tarım) ya da boş","uretimYili":"YYYY ya da boş","etiketTarihi":"GG.AA.YYYY ya da boş","yer":"üretildiği yer / bostan","miktar":"yazıyorsa sayı","birim":"adet|g ya da boş","diger":{"etikette olup yukarıya girmeyen alan adı":"değer"},"supheli":["emin olmadığın alan adları: ad, uretimYili, yer…"]}
-Etiket düzeni üstten alta: TOHUMUN ADI başlığı → tohumun adı → üretici → üretim yılı (bazı etiketlerde 'Ekim Tarihi') → ÜRETİLEN YER. Kurallar: Belediye/müdürlük logosu ve basılı alan başlıkları (TOHUMUN ADI, ÜRETİM YILI, EKİM TARİHİ, ÜRETİLEN YER) değer değildir. Ad iki satıra taşabilir; birleştir. Türkçe karakterleri doğru yaz (İ, Ş, Ğ, Ç, Ö, Ü, ı). Uydurma: okuyamadığın alanı boş bırak.
+Etiket düzeni üstten alta: TOHUMUN ADI başlığı → tohumun adı → üretici → üretim yılı (bazı etiketlerde 'Ekim Tarihi') → ÜRETİLEN YER. Kurallar: Belediye/müdürlük logosu ve basılı alan başlıkları (TOHUMUN ADI, ÜRETİM YILI, EKİM TARİHİ, ÜRETİLEN YER) değer değildir. Ad iki satıra taşabilir; birleştir. Türkçe karakterleri doğru yaz (İ, Ş, Ğ, Ç, Ö, Ü, ı). Yazıyı olduğu gibi aktar: yerel çeşit adlarını (ör. Diş Mısır, Atdişi, Çengelköy) daha bilinen bir kelimeye benzetip değiştirme; bir harften emin değilsen o alanı supheli listesine ekle. Uydurma: okuyamadığın alanı boş bırak.
 Bilinen bostanlar: ${BOSTANLAR.join(', ')}. ${adlar?'Bankada zaten kayıtlı adlar (yazım için örnek; aynısıysa bu yazımı kullan): '+adlar:''}
 Görüntüde okunabilir bir etiket yoksa {"bos":true} döndür.`;
 }
@@ -429,12 +429,12 @@ async function geminiDogrudan(model,anahtarim,parts,json=true){
 const aiHazir=()=>!!S.ai||!!LS.get('tb_gemini','');
 let tessWorker=null;
 const SOZLUK=('domates domatesi biber biberi patlıcan patlıcanı kabak kabağı salatalık salatalığı hıyar kavun kavunu karpuz karpuzu fasulye fasulyesi börülce bezelye nohut bakla mısır mısırı bamya soğan soğanı sarımsak pırasa marul marulu ıspanak roka maydanoz dereotu havuç turp pancar pazı lahana brokoli karnabahar semizotu fesleğen reyhan nane kekik ayçiçeği kadife zinya gazanya çiçek'
- +' tarla bahçe çeri cherry armut sarı kırmızı pembe siyah kara mor yeşil beyaz turuncu bal sivri dolmalık kapya çarliston salkım iri minik küçük büyük uzun yuvarlak yerel köy ata eski yağlık acı tatlı oturak sırık barbunya şeker kış yaz kestane topatan çengelköy ayaş amasya kemer halep kıl çorbalık cin dev pastırma').split(' ');
+ +' tarla bahçe çeri cherry armut sarı kırmızı pembe siyah kara mor yeşil beyaz turuncu bal sivri dolmalık kapya çarliston salkım iri minik küçük büyük uzun yuvarlak yerel köy ata eski yağlık acı tatlı oturak sırık barbunya şeker kış yaz kestane topatan çengelköy ayaş amasya kemer halep kıl çorbalık cin dev pastırma diş dişi atdişi patlak cinmısırı hünnap beypazarı kalecik yerli').split(' ');
 const URETICI_SOZ=('kent tarım birimi kursiyer bostan gönüllü takas tohum ağı derneği köy').split(' ');
 const ETIKET_SOZ=['tohumun','tohum','adi','yer','yeri','ekim','tarihi','tarih','uretim','yili','uretici','uretilen','cankaya','belediyesi','belediye'];
 function lev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,i)=>i);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
 function kelimeDuzelt(w,sozluk){ const k=anahtar(w); if(k.length<3) return null; let en=null,ed=9;
-  for(const s of sozluk){const sk=anahtar(s); const d=lev(k,sk); const esik=sk.length<=4?1:sk.length<=7?2:3; if(d<=esik&&d<ed){ed=d;en=s}} return en?{s:en,d:ed}:null; }
+  for(const s of sozluk){const sk=anahtar(s); const d=lev(k,sk); const esik=sk.length<=4?0:sk.length<=7?1:2; if(d<=esik&&d<ed){ed=d;en=s}} return en?{s:en,d:ed}:null; }
 const etiketKelimesi=w=>{const k=anahtar(w); return k.length>=3&&ETIKET_SOZ.some(e=>k===e||(e.length>=7&&lev(k,e)<=2));};
 function ogrenilenKelimeler(alan='ad'){ const w=new Set(); for(const i of S.items.values()) String(i[alan]||'').split(/\s+/).forEach(x=>{ x=x.replace(/[^\p{L}]/gu,''); if(x.length>=3) w.add(x.toLocaleLowerCase('tr')); }); return [...w]; }
 // Etiket düzeni (üstten alta): Tohumun adı → ad → üretici → üretim yılı / ekim tarihi → üretildiği yer
@@ -453,8 +453,8 @@ function satirAyristir(lines,rakamlar){
     const harfli=kel.filter(w=>/\p{L}{3,}/u.test(w)&&!etiketKelimesi(w)); if(harfli.length) icerik.push({kel:harfli,conf:l.conf||0});
   }
   let adI=-1,enP=0;
-  icerik.forEach((c,i)=>{ const d=c.kel.map(w=>kelimeDuzelt(w,sozluk)).filter(Boolean); const p=d.reduce((a,x)=>a+(3-x.d),0); if(p>enP){enP=p;adI=i;c.duz=d;} });
-  if(adI>=0&&(enP>=3||r.uretimYili||r.yer)){ r.ad=baslikYap(icerik[adI].duz.map(x=>x.s).join(' ')); r._adPuan=enP; }
+  icerik.forEach((c,i)=>{ const d=c.kel.map(w=>kelimeDuzelt(w,sozluk)); const p=d.filter(Boolean).reduce((a,x)=>a+(3-x.d),0); if(p>enP){enP=p;adI=i;c.duz=d;} });
+  if(adI>=0&&(enP>=3||r.uretimYili||r.yer)){ const c=icerik[adI]; r.ad=baslikYap(c.kel.map((w,j)=>c.duz[j]?c.duz[j].s:(/^\p{L}{3,}$/u.test(w)&&c.conf>=60?w:'')).filter(Boolean).join(' ')); r._adPuan=enP; }
   for(let i=adI+1;adI>=0&&i<icerik.length;i++){ const c=icerik[i], uz=c.kel.map(w=>kelimeDuzelt(w,usoz));
     if(uz.some(Boolean)||c.conf>=70){ r.uretici=baslikYap(c.kel.map((w,j)=>uz[j]?uz[j].s:w).join(' ')); break; } }
   return r;
