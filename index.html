@@ -261,7 +261,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-4';
+const APP_VERSION = '2026.11.24-5';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
@@ -345,8 +345,8 @@ async function firebaseBaslat(){
   let db; try{ db=fs.initializeFirestore(fapp,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})}); }catch(e){ db=fs.getFirestore(fapp); }
   const au=auth.getAuth(fapp);
   S.fb={app:fapp,db,fs,auth:au};
-  await new Promise(res=>{ const off=auth.onAuthStateChanged(au,u=>{ if(u){off();res()} }); auth.signInAnonymously(au).catch(e=>{toast('Giriş hatası: '+e.code);res()}); });
-  if(!au.currentUser) throw new Error('auth');
+  await new Promise(res=>{ const off=auth.onAuthStateChanged(au,u=>{ if(u){off();res()} }); auth.signInAnonymously(au).catch(e=>{S.fbHata=e.code||e.message;res()}); });
+  if(!au.currentUser) throw new Error(S.fbHata||'auth');
   const uyeRef=fs.doc(db,'uyeler',au.currentUser.uid);
   let uye=null; try{ const d=await fs.getDoc(uyeRef); if(d.exists()) uye=d.data(); }catch(e){}
   if(!uye){ await kapiGoster(uyeRef); } else { S.uyeAd=uye.ad; LS.set('tb_ad',uye.ad); }
@@ -839,7 +839,12 @@ function degisti(){
 
 /* ================= Başlat ================= */
 tarakapCiz(); yerelYukle(); degisti(); motorBilgi(); ayarlarCiz(); durumGoster();
-if(FIREBASE_CONFIG){ firebaseBaslat().catch(e=>{ toast('Firebase bağlanamadı, yerel moddasın'); console.warn(e); }); }
+if(FIREBASE_CONFIG){ firebaseBaslat().catch(e=>{ S.fbHata=S.fbHata||e.code||e.message||String(e); hataGoster(); console.warn(e); }); }
+function hataGoster(){
+  const k=String(S.fbHata||''); const acik={'auth/operation-not-allowed':'Authentication > Anonim giriş açık değil','auth/admin-restricted-operation':'Authentication > Anonim giriş açık değil','auth/configuration-not-found':'Authentication bölümünde "Başlayın" yapılmamış','auth/network-request-failed':'İnternet bağlantısı yok','auth/api-key-not-valid':'API anahtarı geçersiz'}[k]||'';
+  $('#sheet').innerHTML=`<div class="tutamak"></div><h2>Firebase'e bağlanılamadı</h2><p>Uygulama şimdilik yerel modda çalışıyor.</p><div class="uyari"><b>Hata kodu:</b> ${esc(k)}${acik?'<br><b>Olası sebep:</b> '+esc(acik):''}</div><button class="btn ana genis" id="hata-tamam">Tamam</button>`;
+  $('#perde').classList.add('acik'); $('#hata-tamam').onclick=()=>$('#perde').classList.remove('acik');
+}
 
 if('serviceWorker' in navigator){
   let yenilendi=false; const ilk=!!navigator.serviceWorker.controller;
