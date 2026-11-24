@@ -252,7 +252,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
   <h2>Tohum Bankası'na katıl</h2>
   <p class="kucuk">Ekip kodunu birim sorumlusundan al. Bu cihaz bir kez onaylanınca bir daha sorulmaz.</p>
   <div class="alan"><label>Adın</label><input id="kapi-ad" autocomplete="name"></div>
-  <div class="alan"><label>Ekip kodu</label><input id="kapi-kod" autocomplete="off"></div>
+  <div class="alan"><label>Ekip kodu</label><input id="kapi-kod" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
   <button class="btn ana genis" id="kapi-gir">Giriş</button>
   <div class="kucuk" id="kapi-hata" style="color:var(--kirmizi);margin-top:8px"></div>
 </div></div>
@@ -261,7 +261,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-5';
+const APP_VERSION = '2026.11.24-6';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
