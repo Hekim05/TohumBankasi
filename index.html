@@ -13,6 +13,7 @@
 :root{--yesil:#1f4d36;--yesil2:#2e6b4c;--acik:#eef4ef;--zemin:#f5f3ee;--kart:#fff;--yazi:#1d2420;--soluk:#6a746e;--cizgi:#dfe3dc;
 --kav:#5b7a95;--zarf:#b08550;--kirmizi:#b3412f;--sari:#c98a12;--r:10px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--zemin);color:var(--yazi);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body{padding-bottom:calc(74px + env(safe-area-inset-bottom));overflow-x:hidden}
 header{background:var(--yesil);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px}
@@ -209,6 +210,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
     <div class="ayar-satir"><span>Kayıt yeri</span><b id="ay-mod">—</b></div>
     <div class="ayar-satir"><span>Kullanıcı</span><b id="ay-uye">—</b></div>
     <div class="ayar-satir"><span>Yapay zekâ okuyucu</span><b id="ay-ai">—</b></div>
+    <div class="kucuk" id="ay-aihata" style="color:var(--kirmizi)"></div>
   </div>
   <div class="kutu bant">
     <h3>Okuma</h3>
@@ -262,7 +264,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-8';
+const APP_VERSION = '2026.11.24-9';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = {
@@ -352,11 +354,11 @@ async function firebaseBaslat(){
   let uye=null; try{ const d=await fs.getDoc(uyeRef); if(d.exists()) uye=d.data(); }catch(e){}
   if(!uye){ await kapiGoster(uyeRef); } else { S.uyeAd=uye.ad; LS.set('tb_ad',uye.ad); }
   S.mod='firebase'; durumGoster();
-  fs.onSnapshot(fs.collection(db,'tohumlar'),snap=>{ const m=new Map(); snap.forEach(d=>m.set(d.id,{...d.data(),id:d.id})); S.items=m; degisti(); durumGoster(snap.metadata.fromCache); },e=>toast('Okuma hatası: '+e.code));
+  fs.onSnapshot(fs.collection(db,'tohumlar'),{includeMetadataChanges:true},snap=>{ const m=new Map(); snap.forEach(d=>m.set(d.id,{...d.data(),id:d.id})); S.items=m; degisti(); durumGoster(snap.metadata.fromCache); },e=>toast('Okuma hatası: '+e.code));
   fs.onSnapshot(fs.doc(db,'ayarlar','genel'),d=>{ if(d.exists()) S.genel=Object.assign({ozelAlanlar:[],konumlar:[],omurler:{}},d.data()); degisti(); });
   yerelAktarimSor();
   // Yapay zekâ (Firebase AI Logic, Gemini Developer API)
-  try{ const ai=await import(base+'firebase-ai.js'); S.ai={mod:ai,inst:ai.getAI(fapp,{backend:new ai.GoogleAIBackend()})}; }catch(e){ S.ai=null; }
+  try{ const ai=await import(base+'firebase-ai.js'); S.ai={mod:ai,inst:ai.getAI(fapp,{backend:new ai.GoogleAIBackend()})}; }catch(e){ S.ai=null; LS.set('tb_aihata','Başlatılamadı: '+(e.message||e)); }
   motorBilgi(); ayarlarCiz();
 }
 function yerelAktarimSor(){
@@ -413,7 +415,7 @@ async function aiOku(b64,kap){
         txt=r.response.text();
       } else txt=await geminiDogrudan(m,anahtarim,[{text:aiPrompt(kap)},{inline_data:{mime_type:'image/jpeg',data:b64}}]);
       txt=txt.replace(/^```(json)?|```$/g,'').trim();
-      const j=JSON.parse(txt); j._ham=txt; j._motor='Yapay zekâ ('+m+')'; return j;
+      const j=JSON.parse(txt); j._ham=txt; j._motor='Yapay zekâ ('+m+')'; LS.set('tb_aihata',''); return j;
     }catch(e){ son=e; if(!/not.?found|404|unsupported|invalid.*model/i.test(String(e.message||e))) break; }
   }
   throw son;
@@ -600,11 +602,18 @@ async function oku(){
     if(S.motor==='ocr' || (S.motor==='oto' && !aiVar)) sonuc=await ocrOku(c);
     else sonuc=await aiOku(c.toDataURL('image/jpeg',.85).split(',')[1], S.tarakap);
   }catch(e){ hata=e; }
+  if(hata && aiVar && S.motor!=='ocr'){ const m=String(hata.message||hata).slice(0,160); LS.set('tb_aihata',new Date().toLocaleTimeString('tr-TR')+' · '+m); aiHataGoster(m); K.mesgul=false; $('#cerceve').classList.remove('okuyor'); K.degisim=true; K.bekle=Date.now()+4000; return; }
   if(hata && S.motor==='oto'){ try{ sonuc=await ocrOku(c); }catch(e){} }
   $('#cerceve').classList.remove('okuyor'); K.mesgul=false;
   if(!sonuc){ bip(false); toast('Okunamadı: '+(hata?.message||'bilinmeyen hata').slice(0,80)); K.degisim=true; K.bekle=Date.now()+3000; return; }
   if(sonuc.bos){ bip(false); toast('Okunamadı. Etiketi düz ve çerçeveyi dolduracak kadar yakın tut'); K.degisim=true; K.bekle=Date.now()+3000; return; }
   bip(true); formAc(okumadanKayit(sonuc), {okuma:sonuc});
+}
+function aiHataGoster(m){
+  bip(false);
+  $('#sheet').innerHTML=`<div class="tutamak"></div><h2>Yapay zekâ okuyamadı</h2><div class="uyari"><b>Hata:</b> ${esc(m)}</div><p class="kucuk">Bu ekranın görüntüsünü gönderirsen sebebini bulabilirim. Bu sırada etiketi elle girebilirsin.</p><div class="satir"><button class="btn" id="aih-kapat">Kapat</button><button class="btn ana" id="aih-elle">Elle gir</button></div>`;
+  $('#perde').classList.add('acik'); $('#aih-kapat').onclick=()=>$('#perde').classList.remove('acik');
+  $('#aih-elle').onclick=()=>{ $('#perde').classList.remove('acik'); $('#btn-elle').click(); };
 }
 function okumadanKayit(r){
   const ad=r.ad?baslikYap(r.ad):'';
@@ -797,7 +806,7 @@ $('#btn-yazdir').onclick=()=>{
 function ayarlarCiz(){
   $('#ay-mod').textContent=S.mod==='firebase'?'Firebase (ortak)':'Bu cihaz (yerel)';
   $('#ay-uye').textContent=S.uyeAd||'—';
-  $('#ay-ai').textContent=S.ai?'Bağlı (Firebase)':LS.get('tb_gemini','')?'Bağlı (API anahtarı)':'Bağlı değil'; $('#ay-anahtar').value=LS.get('tb_gemini','');
+  $('#ay-aihata').textContent=LS.get('tb_aihata','')?'Son hata: '+LS.get('tb_aihata',''):''; $('#ay-ai').textContent=S.ai?'Bağlı (Firebase)':LS.get('tb_gemini','')?'Bağlı (API anahtarı)':'Bağlı değil'; $('#ay-anahtar').value=LS.get('tb_gemini','');
   $('#ay-motor').value=S.motor; $('#ay-model').value=S.model; $('#ay-ses').checked=LS.get('tb_ses',true); $('#ay-foto').checked=LS.get('tb_foto',true);
   $('#ozel-alanlar').innerHTML=(S.genel.ozelAlanlar||[]).map(o=>`<div class="ozel-alan"><b>${esc(o.l)}</b><span class="kucuk">${o.t==='secim'?'Seçmeli: '+esc((o.s||[]).join(', ')):o.t==='sayi'?'Sayı':'Metin'}</span><button class="ikonbtn" data-osil="${o.k}">${IKON.sil}</button></div>`).join('')||'<div class="kucuk">Henüz özel alan yok.</div>';
   $('#omur-tablo').innerHTML='<tr><th>Tür</th><th>Ömür (yıl)</th></tr>'+TURLER.map(t=>`<tr><td>${t[0]}</td><td><input type="number" min="1" max="15" data-omur="${t[0]}" value="${omur(t[0])}" style="width:70px;min-height:36px;border:1px solid var(--cizgi);border-radius:6px;padding:0 8px;font:inherit"></td></tr>`).join('');
