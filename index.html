@@ -214,6 +214,8 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
     <h3>Okuma</h3>
     <div class="alan"><label>Okuyucu</label><select id="ay-motor"><option value="oto">Otomatik (yapay zekâ, yoksa çevrimdışı)</option><option value="ai">Yalnız yapay zekâ</option><option value="ocr">Yalnız çevrimdışı OCR (basılı etiket)</option></select></div>
     <div class="ayar-satir"><span>Okuma sesi (bip)</span><input type="checkbox" id="ay-ses" style="width:24px;height:24px"></div>
+    <div class="alan"><label>Gemini API anahtarı (yalnız bu telefonda saklanır)</label><input id="ay-anahtar" type="password" autocomplete="off" placeholder="AIza…"><div class="kucuk">aistudio.google.com/apikey adresinden ücretsiz alınır. Firebase bağlanınca gerekmez.</div>
+      <div class="satir" style="margin-top:8px"><button class="btn" id="ay-anahtar-kaydet">Kaydet</button><button class="btn" id="ay-anahtar-dene">Bağlantıyı dene</button></div></div>
     <div class="alan"><label>Model</label><input id="ay-model" list="model-liste"><datalist id="model-liste"><option value="gemini-3.8-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-4-hydrogen"></datalist><div class="kucuk">Ücretsiz katmanda çalışan modeller: gemini-3.8-flash, gemini-3.5-flash-lite.</div></div>
   </div>
   <div class="kutu bant">
@@ -259,7 +261,7 @@ footer{text-align:center;font-size:12px;color:var(--soluk);padding:16px 0 6px}
 <datalist id="dl-ad"></datalist><datalist id="dl-uretici"></datalist><datalist id="dl-tur"></datalist><datalist id="dl-yer"></datalist><datalist id="dl-konum"></datalist>
 
 <script type="module">
-const APP_VERSION = '2026.11.24-2';
+const APP_VERSION = '2026.11.24-3';
 
 /* ---- Firebase yapılandırması: Firebase konsolu > Proje ayarları > Web uygulaması ---- */
 const FIREBASE_CONFIG = null;
@@ -379,19 +381,34 @@ Bilinen bostanlar: ${BOSTANLAR.join(', ')}. ${adlar?'Bankada zaten kayıtlı adl
 Görüntüde okunabilir bir etiket yoksa {"bos":true} döndür.`;
 }
 async function aiOku(b64,kap){
-  if(!S.ai) throw new Error('Yapay zekâ bağlı değil');
-  const {mod,inst}=S.ai; const modeller=[S.model,'gemini-3.8-flash','gemini-3.5-flash-lite'].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  const anahtarim=LS.get('tb_gemini','');
+  if(!S.ai && !anahtarim) throw new Error('Yapay zekâ bağlı değil');
+  const modeller=[S.model,'gemini-3.8-flash','gemini-3.5-flash-lite'].filter((v,i,a)=>v&&a.indexOf(v)===i);
   let son;
   for(const m of modeller){
     try{
-      const model=mod.getGenerativeModel(inst,{model:m,generationConfig:{responseMimeType:'application/json',temperature:0}});
-      const r=await model.generateContent([aiPrompt(kap),{inlineData:{data:b64,mimeType:'image/jpeg'}}]);
-      const txt=r.response.text().replace(/^```(json)?|```$/g,'').trim();
+      let txt;
+      if(S.ai){
+        const model=S.ai.mod.getGenerativeModel(S.ai.inst,{model:m,generationConfig:{responseMimeType:'application/json',temperature:0}});
+        const r=await model.generateContent([aiPrompt(kap),{inlineData:{data:b64,mimeType:'image/jpeg'}}]);
+        txt=r.response.text();
+      } else txt=await geminiDogrudan(m,anahtarim,[{text:aiPrompt(kap)},{inline_data:{mime_type:'image/jpeg',data:b64}}]);
+      txt=txt.replace(/^```(json)?|```$/g,'').trim();
       const j=JSON.parse(txt); j._ham=txt; j._motor='Yapay zekâ ('+m+')'; return j;
     }catch(e){ son=e; if(!/not.?found|404|unsupported|invalid.*model/i.test(String(e.message||e))) break; }
   }
   throw son;
 }
+// Firebase yokken: telefonda saklanan Gemini API anahtarıyla doğrudan istek
+async function geminiDogrudan(model,anahtarim,parts,json=true){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',
+    headers:{'Content-Type':'application/json','x-goog-api-key':anahtarim},
+    body:JSON.stringify({contents:[{parts}],generationConfig:json?{responseMimeType:'application/json',temperature:0}:{temperature:0}})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((r.status===404?'404 model not found: ':'')+(j.error?.message||('HTTP '+r.status)));
+  return (j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
+}
+const aiHazir=()=>!!S.ai||!!LS.get('tb_gemini','');
 let tessWorker=null;
 const SOZLUK=('domates domatesi biber biberi patlıcan patlıcanı kabak kabağı salatalık salatalığı hıyar kavun kavunu karpuz karpuzu fasulye fasulyesi börülce bezelye nohut bakla mısır mısırı bamya soğan soğanı sarımsak pırasa marul marulu ıspanak roka maydanoz dereotu havuç turp pancar pazı lahana brokoli karnabahar semizotu fesleğen reyhan nane kekik ayçiçeği kadife zinya gazanya çiçek'
  +' tarla bahçe çeri cherry armut sarı kırmızı pembe siyah kara mor yeşil beyaz turuncu bal sivri dolmalık kapya çarliston salkım iri minik küçük büyük uzun yuvarlak yerel köy ata eski yağlık acı tatlı oturak sırık barbunya şeker kış yaz kestane topatan çengelköy ayaş amasya kemer halep kıl çorbalık cin dev pastırma').split(' ');
@@ -541,7 +558,7 @@ async function oku(){
   $('#cerceve').classList.add('okuyor'); $('#ipucu').textContent='Etiket okunuyor…';
   const c=kirpYakala(); // fotoğraf kaydedilmez; yalnız bu kare okunur
   let sonuc=null, hata=null;
-  const aiVar=!!S.ai && navigator.onLine;
+  const aiVar=aiHazir() && navigator.onLine;
   try{
     if(S.motor==='ocr' || (S.motor==='oto' && !aiVar)) sonuc=await ocrOku(c);
     else sonuc=await aiOku(c.toDataURL('image/jpeg',.85).split(',')[1], S.tarakap);
@@ -743,12 +760,19 @@ $('#btn-yazdir').onclick=()=>{
 function ayarlarCiz(){
   $('#ay-mod').textContent=S.mod==='firebase'?'Firebase (ortak)':'Bu cihaz (yerel)';
   $('#ay-uye').textContent=S.uyeAd||'—';
-  $('#ay-ai').textContent=S.ai?'Bağlı':'Yok (Firebase gerekli)';
+  $('#ay-ai').textContent=S.ai?'Bağlı (Firebase)':LS.get('tb_gemini','')?'Bağlı (API anahtarı)':'Bağlı değil'; $('#ay-anahtar').value=LS.get('tb_gemini','');
   $('#ay-motor').value=S.motor; $('#ay-model').value=S.model; $('#ay-ses').checked=LS.get('tb_ses',true);
   $('#ozel-alanlar').innerHTML=(S.genel.ozelAlanlar||[]).map(o=>`<div class="ozel-alan"><b>${esc(o.l)}</b><span class="kucuk">${o.t==='secim'?'Seçmeli: '+esc((o.s||[]).join(', ')):o.t==='sayi'?'Sayı':'Metin'}</span><button class="ikonbtn" data-osil="${o.k}">${IKON.sil}</button></div>`).join('')||'<div class="kucuk">Henüz özel alan yok.</div>';
   $('#omur-tablo').innerHTML='<tr><th>Tür</th><th>Ömür (yıl)</th></tr>'+TURLER.map(t=>`<tr><td>${t[0]}</td><td><input type="number" min="1" max="15" data-omur="${t[0]}" value="${omur(t[0])}" style="width:70px;min-height:36px;border:1px solid var(--cizgi);border-radius:6px;padding:0 8px;font:inherit"></td></tr>`).join('');
   $('#surum').textContent='Sürüm '+APP_VERSION;
 }
+$('#ay-anahtar-kaydet').onclick=()=>{ LS.set('tb_gemini',$('#ay-anahtar').value.trim()); ayarlarCiz(); motorBilgi(); toast($('#ay-anahtar').value.trim()?'Anahtar kaydedildi':'Anahtar silindi'); };
+$('#ay-anahtar-dene').onclick=async()=>{ const k=$('#ay-anahtar').value.trim(); if(!k){toast('Önce anahtarı yapıştır');return}
+  const b=$('#ay-anahtar-dene'); b.disabled=true; b.textContent='Deneniyor…';
+  let son; for(const m of [S.model,'gemini-3.8-flash','gemini-3.5-flash-lite'].filter((v,i,a)=>v&&a.indexOf(v)===i)){
+    try{ await geminiDogrudan(m,k,[{text:'Yalnızca "tamam" yaz.'}],false); LS.set('tb_gemini',k); if(m!==S.model){S.model=m;LS.set('tb_model',m);} ayarlarCiz(); motorBilgi(); toast('Bağlantı çalışıyor ('+m+')'); son=null; break; }
+    catch(e){ son=e; if(!/404|not found/i.test(e.message)) break; } }
+  if(son) toast('Olmadı: '+String(son.message).slice(0,90)); b.disabled=false; b.textContent='Bağlantıyı dene'; };
 $('#ay-ses').onchange=e=>{LS.set('tb_ses',e.target.checked); if(e.target.checked){sesAc();bip(true)}};
 $('#ay-motor').onchange=e=>{S.motor=e.target.value;LS.set('tb_motor',S.motor);motorBilgi()};
 $('#ay-model').onchange=e=>{S.model=e.target.value.trim()||'gemini-3.8-flash';LS.set('tb_model',S.model);motorBilgi()};
@@ -784,7 +808,7 @@ $('#btn-oto').onclick=()=>{K.oto=!K.oto;$('#btn-oto').classList.toggle('acik',K.
 $('#btn-isik').onclick=async()=>{ K.isik=!K.isik; try{ await K.akis.getVideoTracks()[0].applyConstraints({advanced:[{torch:K.isik}]}); $('#btn-isik').classList.toggle('acik',K.isik);}catch(e){toast('Işık açılamadı')} };
 $('#tara-kap').onclick=e=>{const b=e.target.closest('button'); if(!b) return; S.tarakap=b.dataset.k; LS.set('tb_tarakap',S.tarakap); tarakapCiz()};
 function tarakapCiz(){ $('#tara-kap').querySelectorAll('button').forEach(b=>b.classList.toggle('aktif',b.dataset.k===S.tarakap)); }
-function motorBilgi(){ const ai=!!S.ai; $('#motor-bilgi').textContent='Okuyucu: '+(S.motor==='ocr'||(!ai&&S.motor==='oto')?'çevrimdışı OCR':ai?'yapay zekâ':'yapay zekâ (bağlı değil)'); }
+function motorBilgi(){ const ai=aiHazir(); $('#motor-bilgi').textContent='Okuyucu: '+(S.motor==='ocr'||(!ai&&S.motor==='oto')?'çevrimdışı OCR':ai?'yapay zekâ':'yapay zekâ (bağlı değil)'); }
 document.addEventListener('visibilitychange',()=>{ if(document.hidden&&K.akis) kameraKapat(); });
 
 /* ================= Ortak yenileme ================= */
